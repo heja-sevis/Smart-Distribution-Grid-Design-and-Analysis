@@ -1,0 +1,26 @@
+# Ana Uygulama
+streamlit
+pandas
+numpy
+openpyxl
+matplotlib
+
+# Haritalama ve Coğrafi İşlemler
+folium
+streamlit-folium
+geopy
+shapely
+
+# Yapay Zeka ve Makine Öğrenimi
+scikit-learn
+prophet
+
+# Opsiyonel Performans ve Gelişmiş Coğrafi İşlemler
+pyproj
+scipy
+
+# Ek Streamlit bileşenleri
+streamlit-option-menu
+
+# Görselleştirme
+plotly
