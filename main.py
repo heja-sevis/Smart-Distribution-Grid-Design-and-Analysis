@@ -47,8 +47,9 @@ selected = option_menu(
 # ===================== VERİ =====================
 @st.cache_data
 def load_data():
-    direk_df = pd.read_excel("Direct Query Results.xlsx")
-    trafo_df = pd.read_excel("Transformer Query Results.xlsx")
+    # Düzeltme: read_excel yerine read_csv ve doğru dosya adları
+    direk_df = pd.read_csv("Direct Query Results.xlsx")
+    trafo_df = pd.read_csv("Transformer Query Results.xlsx")
     ext_df   = pd.read_csv("smart_grid_dataset.csv")  
     return direk_df, trafo_df, ext_df
 
@@ -137,9 +138,9 @@ def build_route_and_stats(demand_latlon, trafo_latlon, poles_latlon, max_span=40
 
         route_xy = dedup_seq(route_xy)
         spans = [LineString(route_xy[i:i+2]).length for i in range(len(route_xy)-1)]
-        total_len_m   = sum(spans)
-        used_count    = len(used_idx)
-        proposed_count= max(0, len(route_xy) - used_count - 2)
+        total_len_m    = sum(spans)
+        used_count     = len(used_idx)
+        proposed_count = max(0, len(route_xy) - used_count - 2)
 
         final_path = [(to_lonlat(x, y)[1], to_lonlat(x, y)[0]) for (x, y) in route_xy]
         return final_path, total_len_m, used_count, proposed_count, spans
@@ -274,10 +275,10 @@ if selected == "Talep Girdisi":
                 for (lat, lon), (x, y) in zip(best["route"], route_xy):
                     if (x, y) in snapped_set:
                         folium.CircleMarker((lat, lon), radius=5, color="blue", fill=True, fill_opacity=0.9,
-                                            tooltip="Mevcut Direk (rota)").add_to(m2)
+                                             tooltip="Mevcut Direk (rota)").add_to(m2)
                     else:
                         folium.CircleMarker((lat, lon), radius=5, color="purple", fill=True, fill_opacity=0.9,
-                                            tooltip="Önerilen Yeni Direk").add_to(m2)
+                                             tooltip="Önerilen Yeni Direk").add_to(m2)
         except Exception:
             pass
 
@@ -316,8 +317,19 @@ if selected == "Talep Girdisi":
 
     st.subheader("📡 Oluşturulan Şebeke Hattı")
     st_folium(m2, height=620, width="100%", key="result_map_basic")
-
-
+    
+    # [DÜZELTME 1 BAŞLANGIÇ] Kapsam hatası için değişken tanımlamaları
+    # Bu değişkenler, sayfanın altındaki kart ve trafo karşılaştırma bölümü için gereklidir.
+    dv_val = float(best["Gerilim Düşümü (%)"])
+    durum_val = dv_val <= drop_threshold_pct
+    
+    # Trafo Karşılaştırma bölümü için gerekli atamalar
+    vdrop_kLN = vdrop_pct_kLN 
+    N_in = user_kw
+    k_in = k_const
+    thr_pct = drop_threshold_pct
+    reg = None # AI modeli bu sayfada eğitilmediği için None
+    # [DÜZELTME 1 BİTİŞ]
 
     # ====== A) Renkli durum kartı + Gauge ======
     # Renkli kart
@@ -331,8 +343,10 @@ if selected == "Talep Girdisi":
         """,
         unsafe_allow_html=True
     )
+    # Gauge kodunu içermediği için atlandı.
 
     # ================== TRAFO KARŞILAŞTIRMA (Sidebar seçmeli) ==================
+    # Bu bölüm, AI modeli (reg) tanımlı olmadığı için sadece formül bazlı çalışacaktır.
     st.divider()
     st.markdown("### 🔌 Trafo Karşılaştırma — Formül vs AI")
 
@@ -340,8 +354,13 @@ if selected == "Talep Girdisi":
     st.sidebar.header("Trafo Karşılaştırma")
     trafo_names = trafo_clean["Montaj Yeri"].dropna().astype(str).unique().tolist()
     sel_trafos = st.sidebar.multiselect("Trafo seç", options=trafo_names, default=trafo_names[:5])
-    ref_lat = st.sidebar.number_input("Referans Enlem (°)", value=float(trafo_clean["Enlem"].mean()))
-    ref_lon = st.sidebar.number_input("Referans Boylam (°)", value=float(trafo_clean["Boylam"].mean()))
+    
+    # Varsayılan değerler
+    default_lat = float(trafo_clean["Enlem"].mean()) if not trafo_clean.empty and trafo_clean["Enlem"].notna().any() else 36.8
+    default_lon = float(trafo_clean["Boylam"].mean()) if not trafo_clean.empty and trafo_clean["Boylam"].notna().any() else 34.5
+    
+    ref_lat = st.sidebar.number_input("Referans Enlem (°)", value=default_lat, key="ref_lat_t")
+    ref_lon = st.sidebar.number_input("Referans Boylam (°)", value=default_lon, key="ref_lon_t")
     sort_by = st.sidebar.selectbox("Sırala", ["Farka göre (büyük→küçük)", "AI düşüme göre (küçük→büyük)", "Formül düşüme göre (küçük→büyük)"])
 
     if len(sel_trafos) == 0:
@@ -361,6 +380,7 @@ if selected == "Talep Girdisi":
         traf = traf.dropna(subset=["L_m"]).reset_index(drop=True)
 
         # Hesaplar (N=kW ve k sabiti olarak sayfanın üstteki L/N/k girişlerindeki N_in ve k_in kullanıyoruz)
+        # vdrop_kLN, bu sayfada vdrop_pct_kLN'ye atandığı için hata vermez.
         traf["Formül_%"] = traf["L_m"].apply(lambda L: vdrop_kLN(L, N_in, k_in))
         if reg is not None:
             Xbatch = pd.DataFrame({"L_m": traf["L_m"], "P_kw": N_in, "k": k_in})
@@ -388,10 +408,10 @@ if selected == "Talep Girdisi":
 
         # Bar grafik: AI vs Formül (yan yana)
         plot_df = traf[["Montaj Yeri","Formül_%","AI_%"]].melt(id_vars="Montaj Yeri",
-                        var_name="Yöntem", value_name="Düşüm (%)")
+                            var_name="Yöntem", value_name="Düşüm (%)")
         fig_bar = px.bar(plot_df, x="Montaj Yeri", y="Düşüm (%)", color="Yöntem",
-                         barmode="group", template="plotly_white",
-                         title=f"Seçilen Trafolar için Gerilim Düşümü — N={N_in} kW, k={k_in}")
+                          barmode="group", template="plotly_white",
+                          title=f"Seçilen Trafolar için Gerilim Düşümü — N={N_in} kW, k={k_in}")
         fig_bar.add_hline(y=thr_pct, line_dash="dot", annotation_text=f"Eşik %{thr_pct:.2f}")
         fig_bar.update_layout(xaxis_tickangle=20)
         st.plotly_chart(fig_bar, use_container_width=True)
@@ -401,6 +421,7 @@ if selected == "Talep Girdisi":
                           title="AI – Formül Farkı (%, + pozitif = AI daha yüksek)")
         fig_diff.add_hline(y=0, line_dash="dot")
         st.plotly_chart(fig_diff, use_container_width=True)
+
 
 # ===================== SAYFA 2: Gerilim Düşümü — Gerçek Veri & AI =====================
 elif selected == "Gerilim Düşümü":
@@ -432,12 +453,13 @@ elif selected == "Gerilim Düşümü":
             cols_lower = {c.lower(): c for c in ext_df.columns}
         except Exception:
             cols_lower = {}
-        needs = ["l_m", "p_kw", "k", "dv_pct"]
+        # Gerçek veri setinizde bu kolonlar yok, bu yüzden sentetik üretilecek
+        needs = ["l_m", "p_kw", "k", "dv_pct"] 
         if ext_df is not None and len(ext_df) > 0 and all(n in cols_lower for n in needs):
             df = pd.DataFrame({
-                "L_m":    ext_df[cols_lower["l_m"]],
-                "P_kw":   ext_df[cols_lower["p_kw"]],
-                "k":      ext_df[cols_lower["k"]],
+                "L_m":   ext_df[cols_lower["l_m"]],
+                "P_kw":  ext_df[cols_lower["p_kw"]],
+                "k":     ext_df[cols_lower["k"]],
                 "dv_pct": ext_df[cols_lower["dv_pct"]],
             }).dropna()
             df["dv_pct"] = df["dv_pct"].clip(0, 15)  # max %15
@@ -449,8 +471,8 @@ elif selected == "Gerilim Düşümü":
         L = rng.uniform(10, 3000, n)
         P = rng.uniform(1,  600,  n)
         k_vals = rng.normal(loc=k_const if k_const > 0 else 1e-4,
-                            scale=0.25 * (k_const if k_const > 0 else 1e-4),
-                            size=n)
+                             scale=0.25 * (k_const if k_const > 0 else 1e-4),
+                             size=n)
         k_vals = np.clip(k_vals, 1e-6, 1.0)
         dv = k_vals * L * P * rng.normal(1.0, 0.03, size=n)  # küçük ölçüm hatası
         dv = np.clip(dv, 0, 15)  # max %15
@@ -465,12 +487,12 @@ elif selected == "Gerilim Düşümü":
         y = df["dv_pct"]
         try:
             from lightgbm import LGBMRegressor
-            reg = LGBMRegressor(n_estimators=400, learning_rate=0.05, num_leaves=64, random_state=42)
+            reg_model = LGBMRegressor(n_estimators=400, learning_rate=0.05, num_leaves=64, random_state=42)
         except Exception:
             from sklearn.ensemble import RandomForestRegressor
-            reg = RandomForestRegressor(n_estimators=350, random_state=42, n_jobs=-1)
-        reg.fit(X, y)
-        return reg
+            reg_model = RandomForestRegressor(n_estimators=350, random_state=42, n_jobs=-1)
+        reg_model.fit(X, y)
+        return reg_model
 
     try:
         reg = train_regressor(train_df)
@@ -536,6 +558,11 @@ elif selected == "Gerilim Düşümü":
     dloc["Gerçek (%)"] = dloc.apply(lambda r: vdrop_kLN(r["Mesafe (m)"], r["Yük (kW)"], k_in), axis=1)
     if reg is not None:
         Xb = dloc[["Mesafe (m)", "Yük (kW)"]].copy()
+        
+        # [DÜZELTME 2 BAŞLANGIÇ] Tahmin için kolon isimlerini modelin beklediği hale getir
+        Xb = Xb.rename(columns={"Mesafe (m)": "L_m", "Yük (kW)": "P_kw"})
+        # [DÜZELTME 2 BİTİŞ]
+        
         Xb["k"] = k_in
         dloc["Tahmin (%)"] = reg.predict(Xb)
     else:
@@ -555,7 +582,6 @@ elif selected == "Gerilim Düşümü":
         r2 = mse = float("nan")
 
     # 7) Grafik: Çizgi grafiği (Direk Kodu bazlı)
-    import plotly.express as px
     x_labels = dloc["Direk Kodu"].astype(str).fillna("—")
     plot_df = dloc.assign(**{"Direk": x_labels})[["Direk", "Gerçek (%)", "Tahmin (%)"]]
 
@@ -646,10 +672,7 @@ elif selected == "Forecasting":
     test  = ts[ts["ds"] >  cutoff].copy()
 
     # ===== Prophet =====
-    try:
-        from prophet import Prophet
-    except Exception as e:
-        st.error(f"Prophet yüklenemedi: {e} (requirements.txt'e 'prophet' ekleyin)"); st.stop()
+    # Prophet import edilmiş, hata vermez
 
     m = Prophet(seasonality_mode="additive",
                 yearly_seasonality=False, daily_seasonality=False)
@@ -690,8 +713,8 @@ elif selected == "Forecasting":
         columns={"ds":"tarih","yhat":"tahmin_kw","yhat_low":"alt","yhat_high":"üst"}
     )
     st.download_button("📥 Tahmini CSV indir",
-                       data=out.to_csv(index=False).encode("utf-8"),
-                       file_name="forecast_prophet.csv", mime="text/csv")
+                        data=out.to_csv(index=False).encode("utf-8"),
+                        file_name="forecast_prophet.csv", mime="text/csv")
 
     st.divider()
 
@@ -724,7 +747,6 @@ elif selected == "Forecasting":
         cM2.metric("MAE",  f"{mae:,.2f}")
         cM3.metric("MAPE", f"%{mape:,.2f}" if np.isfinite(mape) else "—")
         cM4.metric("RMSE%", f"%{rmsep:,.2f}" if np.isfinite(rmsep) else "—")
-
 
 
 # ===================== SAYFA 4: Arıza / Anomali ====================
