@@ -47,8 +47,8 @@ selected = option_menu(
 # ===================== VERİ =====================
 @st.cache_data
 def load_data():
-    direk_df = pd.read_excel("Direk Sorgu Sonuçları.xlsx")
-    trafo_df = pd.read_excel("Trafo Sorgu Sonuçları.xlsx")
+    direk_df = pd.read_excel("Direct Query Results.xlsx")
+    trafo_df = pd.read_excel("Transformer Query Results.xlsx")
     ext_df   = pd.read_csv("smart_grid_dataset.csv")  
     return direk_df, trafo_df, ext_df
 
