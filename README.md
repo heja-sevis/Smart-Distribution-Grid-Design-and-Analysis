@@ -10,12 +10,12 @@ This application leverages Streamlit, Machine Learning, and Geospatial Analysis 
 ## 🚀 Project Overview and Features
 
 The application consists of four core modules:
-* **1.Demand Input & Route Planning :**
+* **1. Demand Input & Route Planning :**
     * Interactive map-based selection of new demand points.
     * Automated route generation between the demand point and the nearest transformers.
     * Smart "snapping" to existing poles within a defined radius.
     * Comparison of candidate transformers based on capacity and voltage drop.
-* **2.Voltage Drop Analysis (Formula vs. ML) :**
+* **2. Voltage Drop Analysis (Formula vs. ML) :**
     * Calculates voltage drop using both the standard engineering formula ($k \cdot L \cdot N$) and a trained Machine Learning model (LightGBM/RandomForest).
     * Visual comparison of ML predictions against theoretical values for selected transformers
 * **3. Forecasting:**
